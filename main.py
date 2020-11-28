@@ -195,7 +195,9 @@ if testing:
 
 else:
     # training part
-    dataset_path = "dataset"
+    dataset_path = "train_dataset"
+
+    create_dataset(dataset_path, block_size)
 
     X = read_data("features.npy")
     y = read_data("labels.npy")
