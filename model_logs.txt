@@ -1,0 +1,28 @@
+Bayes MODEL
+    Block Size  = 7
+    Num of Disp = 19
+CM:
+    [[233321      0]
+    [ 13549 219772]]
+
+Precision, Recall:
+    (1.0, 0.9419297877173508)
+
+Mean Square Errors on Test Images:
+    1972.12 - sawtooth
+    1756.32 - venus
+------------------------------------------------
+SVM MODEL
+Params : 
+    Block Size  = 7
+    Num of Disp = 19
+CM:
+    [[233038    283]
+    [     0 233321]]
+
+Precision, Recall:
+    (0.9987885481412989, 1.0)
+
+Mean Square Errors on Test Images:
+    741.14 - sawtooth
+    676.82 - venus
