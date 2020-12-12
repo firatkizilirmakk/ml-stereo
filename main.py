@@ -62,7 +62,7 @@ def create_features(left_patch, right_patch, block_size):
 
     return feature_vector
 
-def create_dataset(dataset_path, block_size):
+def create_dataset(dataset_path, block_size, is_test = False):
     dataset_dir = os.listdir(dataset_path)
 
     pos_feature_vectors = []
@@ -110,9 +110,12 @@ def create_dataset(dataset_path, block_size):
     feature_vectors = np.float32(feature_vectors)
     labels = np.array(labels)
 
+    feature_path = ("test_" if is_test else "") + "features.npy"
+    label_path = ("test_" if is_test else "") + "labels.npy"
+
     # save the feature vectors and labels for later use
-    np.save("features.npy", feature_vectors)
-    np.save("labels.npy", labels)
+    np.save(feature_path, feature_vectors)
+    np.save(label_path, labels)
 
 def read_data(data_path):
     data = np.load(data_path, allow_pickle = True)
@@ -226,6 +229,22 @@ if testing:
         model = cv2.ml.SVM_load("svm_model")
 
     test_dataset_path = "test_dataset"
+
+    # create the test feature vectors and labels
+    # create_dataset(test_dataset_path, block_size, is_test=True)
+
+    # predict for whole test set to get confusion matrix and other scores
+    X = read_data("test_features.npy")
+    y = np.float32(read_data("test_labels.npy"))
+
+    preds = model.predict(X)[1]
+
+    cm = confusion_matrix(y, preds)
+    (prec, recall, f1, _) = precision_recall_fscore_support(y, preds, average="binary")
+
+    print(cm)
+    print("Precision : ", prec, " Recall : ", recall, " F1 : ", f1)
+
     dataset_dir = os.listdir(test_dataset_path)
     for directory in dataset_dir:
         img_path = os.path.join(test_dataset_path, directory)
@@ -257,7 +276,7 @@ else:
     create_dataset(dataset_path, block_size)
 
     X = read_data("features.npy")
-    y = read_data("labels.npy")
+    y = np.float32(read_data("labels.npy"))
 
     if model_name == "Bayes":
         bayes = cv2.ml.NormalBayesClassifier_create()
