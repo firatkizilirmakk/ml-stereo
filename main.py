@@ -2,13 +2,11 @@ import sys
 import os
 import cv2
 import numpy as np
-import pickle
+import pickle 
 from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_fscore_support
-
-# import models
 from sklearn.naive_bayes import GaussianNB
 
 def get_positive_pair(left_img, right_img, disp_img, x, y, block_size):
@@ -222,8 +220,7 @@ from random import shuffle
 
 block_size = 7
 testing = True
-model_name = "GaussianNB"
-
+model_name = "logistic"
 if testing:
     # testing part
     num_of_disparities = 16
@@ -238,10 +235,10 @@ if testing:
         model = pickle.load(open("decision_tree_model", mode="rb"))
     elif model_name == "SVM":
         model = cv2.ml.SVM_load("svm_model")
-
+    elif model_name == "logistic":
+        model = cv2.ml.LogisticRegression_load("lr_model")
+    
     test_dataset_path = "test_dataset"
-
-    # create the test feature vectors and labels
     create_dataset(test_dataset_path, block_size, is_test=True)
 
     # predict for whole test set to get confusion matrix and other scores
@@ -250,9 +247,8 @@ if testing:
 
     if model_name == "GaussianNB" or model_name == "DT":
         preds = model.predict(X)
-    elif model_name == "SVM" or model_name == "NormalBayes":
+    elif model_name == "SVM" or model_name == "NormalBayes" or model_name== "logistic":
         preds = model.predict(X)[1]
-
     cm = confusion_matrix(y, preds, labels = [1, -1])
     (prec, recall, f1, _) = precision_recall_fscore_support(y, preds, average="binary", pos_label=1)
 
@@ -263,10 +259,9 @@ if testing:
     for directory in dataset_dir:
         img_path = os.path.join(test_dataset_path, directory)
 
-        right_img = cv2.imread(img_path + "/im6.ppm", 0)
-        left_img = cv2.imread(img_path + "/im2.ppm", 0)
+        left_img = cv2.imread(img_path + "/im6.ppm", 0)
+        right_img = cv2.imread(img_path + "/im2.ppm", 0)
         disp_img = cv2.imread(img_path + "/disp6.pgm", 0)
-
         # compute base disparity using block based matching
         # divide by 2 to make disparity calculation similar
         base_disparity_img = base_model.compute(left_img, right_img) / 2
@@ -274,8 +269,9 @@ if testing:
         # compute disparity with ml model
         if model_name == "GaussianNB" or model_name == "DT":
             predicted_disp_img = stereoSKlearn(model, right_img, left_img, num_of_disparities, block_size)
-        elif model_name == "SVM" or model_name == "NormalBayes":
-            predicted_disp_img = stereoOpenCV(model, right_img, left_img, num_of_disparities, block_size)
+        elif model_name == "SVM" or model_name == "logistic":
+            predicted_disp_img = stereoOpenCV(model, left_img, right_img, num_of_disparities, block_size)
+
 
         our_mse = (np.square(disp_img - predicted_disp_img)).mean(axis = None)
         base_mse = (np.square(disp_img - base_disparity_img)).mean(axis = None)
@@ -294,13 +290,12 @@ if testing:
 
 else:
     # training part
-    dataset_path = "train_dataset"
-
-    create_dataset(dataset_path, block_size)
+    dataset_path = "train_dataset/"
+    #create_dataset(dataset_path, block_size)
+    
 
     X = read_data("features.npy")
     y = read_data("labels.npy")
-
     if model_name == "NormalBayes":
         bayes = cv2.ml.NormalBayesClassifier_create()
         bayes.train(X, cv2.ml.ROW_SAMPLE, y)
@@ -314,6 +309,14 @@ else:
         svm.setType(cv2.ml.SVM_C_SVC)
         svm.setKernel(cv2.ml.SVM_LINEAR)
         svm.setTermCriteria((cv2.TERM_CRITERIA_MAX_ITER, 100, 1e-6))
-
         svm.train(X, cv2.ml.ROW_SAMPLE, y)
         svm.save("svm_model")
+    elif model_name == "logistic":
+        X = X.astype(np.float32)
+        y = y.astype(np.float32)
+        lr = cv2.ml.LogisticRegression_create()
+        lr.setTrainMethod(cv2.ml.LogisticRegression_MINI_BATCH)
+        lr.setMiniBatchSize(1)
+        lr.setTermCriteria((cv2.TERM_CRITERIA_MAX_ITER, 200, 1e-6))
+        lr.train(X, cv2.ml.ROW_SAMPLE, y)
+        lr.save("lr_model")
