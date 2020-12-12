@@ -2,10 +2,14 @@ import sys
 import os
 import cv2
 import numpy as np
+import pickle
 from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_fscore_support
+
+# import models
+from sklearn.naive_bayes import GaussianNB
 
 def get_positive_pair(left_img, right_img, disp_img, x, y, block_size):
     if left_img.shape != right_img.shape:
@@ -122,7 +126,7 @@ def read_data(data_path):
     return data
 
 
-def stereo(model, left_img, right_img, num_of_disparities, block_size):
+def stereoSKlearn(model, left_img, right_img, num_of_disparities, block_size):
     if left_img.shape != right_img.shape:
         return None
 
@@ -153,7 +157,7 @@ def stereo(model, left_img, right_img, num_of_disparities, block_size):
 
                     # predict whether these patches belong to the same place, object etc.
                     prediction = model.predict(feature_vector)
-                    prediction = prediction[1][0][0]
+                    prediction = prediction[0]
 
                     # if patches belong the same place, calculate the score
                     if prediction == 1:
@@ -168,7 +172,7 @@ def stereo(model, left_img, right_img, num_of_disparities, block_size):
 
     return new_disp_img
 
-def stereoBayes(model, left_img, right_img, num_of_disparities, block_size):
+def stereoOpenCV(model, left_img, right_img, num_of_disparities, block_size):
     if left_img.shape != right_img.shape:
         return None
 
@@ -198,7 +202,7 @@ def stereoBayes(model, left_img, right_img, num_of_disparities, block_size):
                     feature_vector = feature_vector[np.newaxis, : ]
 
                     # predict whether these patches belong to the same place, object etc.
-                    prediction = model.predictProb(feature_vector)
+                    prediction = model.predict(feature_vector)
                     prediction = prediction[1][0][0]
 
                     # if patches belong the same place, calculate the score
@@ -218,29 +222,39 @@ from random import shuffle
 
 block_size = 7
 testing = True
-model_name = "SVM"
+model_name = "GaussianNB"
 
 if testing:
     # testing part
-    num_of_disparities = 19
-    if model_name == "Bayes":
-        model = cv2.ml.NormalBayesClassifier_load("bayes_model")
+    num_of_disparities = 16
+
+    base_model = cv2.StereoBM_create(blockSize=block_size, numDisparities=num_of_disparities)
+
+    if model_name == "NormalBayes":
+        model = cv2.ml.NormalBayesClassifier_load("normal_bayes_model")
+    elif model_name == "GaussianNB":
+        model = pickle.load(open("gaussiannb_model", mode="rb"))
+    elif model_name == "DT":
+        model = pickle.load(open("decision_tree_model", mode="rb"))
     elif model_name == "SVM":
         model = cv2.ml.SVM_load("svm_model")
 
     test_dataset_path = "test_dataset"
 
     # create the test feature vectors and labels
-    # create_dataset(test_dataset_path, block_size, is_test=True)
+    create_dataset(test_dataset_path, block_size, is_test=True)
 
     # predict for whole test set to get confusion matrix and other scores
     X = read_data("test_features.npy")
     y = np.float32(read_data("test_labels.npy"))
 
-    preds = model.predict(X)[1]
+    if model_name == "GaussianNB" or model_name == "DT":
+        preds = model.predict(X)
+    elif model_name == "SVM" or model_name == "NormalBayes":
+        preds = model.predict(X)[1]
 
-    cm = confusion_matrix(y, preds)
-    (prec, recall, f1, _) = precision_recall_fscore_support(y, preds, average="binary")
+    cm = confusion_matrix(y, preds, labels = [1, -1])
+    (prec, recall, f1, _) = precision_recall_fscore_support(y, preds, average="binary", pos_label=1)
 
     print(cm)
     print("Precision : ", prec, " Recall : ", recall, " F1 : ", f1)
@@ -249,24 +263,33 @@ if testing:
     for directory in dataset_dir:
         img_path = os.path.join(test_dataset_path, directory)
 
-        left_img = cv2.imread(img_path + "/im6.ppm", 0)
-        right_img = cv2.imread(img_path + "/im2.ppm", 0)
+        right_img = cv2.imread(img_path + "/im6.ppm", 0)
+        left_img = cv2.imread(img_path + "/im2.ppm", 0)
         disp_img = cv2.imread(img_path + "/disp6.pgm", 0)
 
-        if model_name == "Bayes":
-            predicted_disp_img = stereoBayes(model, left_img, right_img, num_of_disparities, block_size)
-        elif model_name == "SVM":
-            predicted_disp_img = stereo(model, left_img, right_img, num_of_disparities, block_size)
+        # compute base disparity using block based matching
+        # divide by 2 to make disparity calculation similar
+        base_disparity_img = base_model.compute(left_img, right_img) / 2
 
-        mse = (np.square(disp_img - predicted_disp_img)).mean(axis = None)
-        print("MSE : ", mse)
+        # compute disparity with ml model
+        if model_name == "GaussianNB" or model_name == "DT":
+            predicted_disp_img = stereoSKlearn(model, right_img, left_img, num_of_disparities, block_size)
+        elif model_name == "SVM" or model_name == "NormalBayes":
+            predicted_disp_img = stereoOpenCV(model, right_img, left_img, num_of_disparities, block_size)
 
-        fig, ax = plt.subplots(1, 2)
+        our_mse = (np.square(disp_img - predicted_disp_img)).mean(axis = None)
+        base_mse = (np.square(disp_img - base_disparity_img)).mean(axis = None)
+        print("Base MSE : ", base_mse)
+        print("Our  MSE : ", our_mse)
+
+        fig, ax = plt.subplots(1, 3)
         ax[0].imshow(disp_img, "gray")
-        ax[1].imshow(predicted_disp_img, "gray")
+        ax[1].imshow(base_disparity_img, "gray")
+        ax[2].imshow(predicted_disp_img, "gray")
 
         ax[0].set_xlabel("Ground Truth Disparity Map")
-        ax[1].set_xlabel("Calculated Disparity Map")
+        ax[1].set_xlabel("Base Disparity Map")
+        ax[2].set_xlabel("Calculated Disparity Map")
         plt.show()
 
 else:
@@ -276,12 +299,16 @@ else:
     create_dataset(dataset_path, block_size)
 
     X = read_data("features.npy")
-    y = np.float32(read_data("labels.npy"))
+    y = read_data("labels.npy")
 
-    if model_name == "Bayes":
+    if model_name == "NormalBayes":
         bayes = cv2.ml.NormalBayesClassifier_create()
         bayes.train(X, cv2.ml.ROW_SAMPLE, y)
-        bayes.save("bayes_model")
+        bayes.save("normal_bayes_model")
+    elif model_name == "GaussianNB":
+        gnb = GaussianNB()
+        gnb.fit(X, y)
+        pickle.dump(gnb, open("gaussiannb_model", mode="wb"))
     elif model_name == "SVM":
         svm = cv2.ml.SVM_create()
         svm.setType(cv2.ml.SVM_C_SVC)
