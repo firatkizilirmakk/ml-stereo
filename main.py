@@ -7,9 +7,13 @@ from matplotlib import pyplot as plt
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import accuracy_score
+from sklearn import tree
+import graphviz
 
 # import models
-from sklearn.naive_bayes import GaussianNB
+from sklearn.naive_bayes import MultinomialNB, GaussianNB
+from sklearn.tree import DecisionTreeClassifier
 
 def get_positive_pair(left_img, right_img, disp_img, x, y, block_size):
     if left_img.shape != right_img.shape:
@@ -66,6 +70,13 @@ def create_features(left_patch, right_patch, block_size):
 
     return feature_vector
 
+def create_features2(left_patch, right_patch, block_size):
+    left_patch = np.reshape(left_patch, (block_size * block_size))
+    right_patch = np.reshape(right_patch, (block_size * block_size))
+    feature_vector = np.concatenate((left_patch, right_patch), axis=0)
+
+    return feature_vector
+
 def create_dataset(dataset_path, block_size, is_test = False):
     dataset_dir = os.listdir(dataset_path)
 
@@ -114,8 +125,8 @@ def create_dataset(dataset_path, block_size, is_test = False):
     feature_vectors = np.float32(feature_vectors)
     labels = np.array(labels)
 
-    feature_path = ("test_" if is_test else "") + "features.npy"
-    label_path = ("test_" if is_test else "") + "labels.npy"
+    feature_path = ("test_" if is_test else "") + "features2.npy"
+    label_path = ("test_" if is_test else "") + "labels2.npy"
 
     # save the feature vectors and labels for later use
     np.save(feature_path, feature_vectors)
@@ -230,12 +241,12 @@ if testing:
 
     base_model = cv2.StereoBM_create(blockSize=block_size, numDisparities=num_of_disparities)
 
-    if model_name == "NormalBayes":
-        model = cv2.ml.NormalBayesClassifier_load("normal_bayes_model")
+    if model_name == "DecisionTree":
+        model = pickle.load(open("decision_tree_model", mode="rb"))
+    elif model_name == "MultinomialNB":
+        model = pickle.load(open("multinomialnb_model", mode="rb"))
     elif model_name == "GaussianNB":
         model = pickle.load(open("gaussiannb_model", mode="rb"))
-    elif model_name == "DT":
-        model = pickle.load(open("decision_tree_model", mode="rb"))
     elif model_name == "SVM":
         model = cv2.ml.SVM_load("svm_model")
 
@@ -248,16 +259,17 @@ if testing:
     X = read_data("test_features.npy")
     y = np.float32(read_data("test_labels.npy"))
 
-    if model_name == "GaussianNB" or model_name == "DT":
+    if model_name == "MultinomialNB" or model_name == "DecisionTree" or model_name == "GaussianNB":
         preds = model.predict(X)
-    elif model_name == "SVM" or model_name == "NormalBayes":
+    elif model_name == "SVM":
         preds = model.predict(X)[1]
 
     cm = confusion_matrix(y, preds, labels = [1, -1])
     (prec, recall, f1, _) = precision_recall_fscore_support(y, preds, average="binary", pos_label=1)
+    acc = accuracy_score(y, preds)
 
     print(cm)
-    print("Precision : ", prec, " Recall : ", recall, " F1 : ", f1)
+    print("Accuracy :", acc, " Precision : ", prec, " Recall : ", recall, " F1 : ", f1)
 
     dataset_dir = os.listdir(test_dataset_path)
     for directory in dataset_dir:
@@ -272,9 +284,9 @@ if testing:
         base_disparity_img = base_model.compute(left_img, right_img) / 2
 
         # compute disparity with ml model
-        if model_name == "GaussianNB" or model_name == "DT":
+        if model_name == "MultinomialNB" or model_name == "DecisionTree" or model_name == "GaussianNB":
             predicted_disp_img = stereoSKlearn(model, right_img, left_img, num_of_disparities, block_size)
-        elif model_name == "SVM" or model_name == "NormalBayes":
+        elif model_name == "SVM":
             predicted_disp_img = stereoOpenCV(model, right_img, left_img, num_of_disparities, block_size)
 
         our_mse = (np.square(disp_img - predicted_disp_img)).mean(axis = None)
@@ -301,14 +313,18 @@ else:
     X = read_data("features.npy")
     y = read_data("labels.npy")
 
-    if model_name == "NormalBayes":
-        bayes = cv2.ml.NormalBayesClassifier_create()
-        bayes.train(X, cv2.ml.ROW_SAMPLE, y)
-        bayes.save("normal_bayes_model")
+    if model_name == "DecisionTree":
+        dt = DecisionTreeClassifier()
+        dt.fit(X, y)
+        pickle.dump(dt, open("decision_tree_model", mode="wb"))
+    elif model_name == "MultinomialNB":
+        mnb = MultinomialNB()
+        mnb.fit(X, y)
+        pickle.dump(mnb, open("multinomialnb_model", mode="wb"))
     elif model_name == "GaussianNB":
         gnb = GaussianNB()
         gnb.fit(X, y)
-        pickle.dump(gnb, open("gaussiannb_model", mode="wb"))
+        pickle.dump(gnb, open("gaussiannb_model", mode="wb"))        
     elif model_name == "SVM":
         svm = cv2.ml.SVM_create()
         svm.setType(cv2.ml.SVM_C_SVC)
