@@ -233,26 +233,32 @@ from random import shuffle
 
 block_size = 7
 testing = True
-model_name = "logistic"
+model_name = "DecisionTree"
 if testing:
     # testing part
     num_of_disparities = 16
 
     base_model = cv2.StereoBM_create(blockSize=block_size, numDisparities=num_of_disparities)
 
+    model_base_path = "./models"
     if model_name == "DecisionTree":
-        model = pickle.load(open("decision_tree_model", mode="rb"))
+        model_path = os.path.join(model_base_path, "decision_tree_model")
+        model = pickle.load(open(model_path, mode="rb"))
     elif model_name == "MultinomialNB":
-        model = pickle.load(open("multinomialnb_model", mode="rb"))
+        model_path = os.path.join(model_base_path, "multinomialnb_model")
+        model = pickle.load(open(model_path, mode="rb"))
     elif model_name == "GaussianNB":
-        model = pickle.load(open("gaussiannb_model", mode="rb"))
+        model_path = os.path.join(model_base_path, "gaussiannb_model")
+        model = pickle.load(open(model_path, mode="rb"))
     elif model_name == "SVM":
-        model = cv2.ml.SVM_load("svm_model")
+        model_path = os.path.join(model_base_path, "svm_model")
+        model = cv2.ml.SVM_load(model_path)
     elif model_name == "logistic":
-        model = cv2.ml.LogisticRegression_load("lr_model")
-    
+        model_path = os.path.join(model_base_path, "lr_model")
+        model = cv2.ml.LogisticRegression_load(model_path)
+
     test_dataset_path = "test_dataset"
-    create_dataset(test_dataset_path, block_size, is_test=True)
+    # create_dataset(test_dataset_path, block_size, is_test=True)
 
     # predict for whole test set to get confusion matrix and other scores
     X = read_data("test_features.npy")
@@ -305,8 +311,7 @@ if testing:
 else:
     # training part
     dataset_path = "train_dataset/"
-    #create_dataset(dataset_path, block_size)
-    
+    create_dataset(dataset_path, block_size)
 
     X = read_data("features.npy")
     y = read_data("labels.npy")
