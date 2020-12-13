@@ -234,13 +234,13 @@ from random import shuffle
 block_size = 7
 testing = True
 model_name = "DecisionTree"
+model_base_path = "./models"
 if testing:
     # testing part
     num_of_disparities = 16
 
     base_model = cv2.StereoBM_create(blockSize=block_size, numDisparities=num_of_disparities)
 
-    model_base_path = "./models"
     if model_name == "DecisionTree":
         model_path = os.path.join(model_base_path, "decision_tree_model")
         model = pickle.load(open(model_path, mode="rb"))
@@ -284,11 +284,11 @@ if testing:
         disp_img = cv2.imread(img_path + "/disp6.pgm", 0)
         # compute base disparity using block based matching
         # divide by 2 to make disparity calculation similar
-        base_disparity_img = base_model.compute(left_img, right_img) / 2
+        base_disparity_img = base_model.compute(right_img, left_img) / 2
 
         # compute disparity with ml model
         if model_name == "MultinomialNB" or model_name == "DecisionTree" or model_name == "GaussianNB":
-            predicted_disp_img = stereoSKlearn(model, right_img, left_img, num_of_disparities, block_size)
+            predicted_disp_img = stereoSKlearn(model, left_img, right_img, num_of_disparities, block_size)
         elif model_name == "SVM" or model_name == "logistic":
             predicted_disp_img = stereoOpenCV(model, left_img, right_img, num_of_disparities, block_size)
 
@@ -319,28 +319,35 @@ else:
     if model_name == "DecisionTree":
         dt = DecisionTreeClassifier()
         dt.fit(X, y)
-        pickle.dump(dt, open("decision_tree_model", mode="wb"))
+        model_path = os.path.join(model_base_path, "decision_tree_model")
+        pickle.dump(dt, open(model_path, mode="wb"))
     elif model_name == "MultinomialNB":
         mnb = MultinomialNB()
         mnb.fit(X, y)
-        pickle.dump(mnb, open("multinomialnb_model", mode="wb"))
+        model_path = os.path.join(model_base_path, "multinomialnb_model")
+        pickle.dump(mnb, open(model_path, mode="wb"))
     elif model_name == "GaussianNB":
         gnb = GaussianNB()
         gnb.fit(X, y)
-        pickle.dump(gnb, open("gaussiannb_model", mode="wb"))        
+        model_path = os.path.join(model_base_path, "gaussiannb_model")
+        pickle.dump(gnb, open(model_path, mode="wb"))
     elif model_name == "SVM":
         svm = cv2.ml.SVM_create()
         svm.setType(cv2.ml.SVM_C_SVC)
         svm.setKernel(cv2.ml.SVM_LINEAR)
         svm.setTermCriteria((cv2.TERM_CRITERIA_MAX_ITER, 100, 1e-6))
         svm.train(X, cv2.ml.ROW_SAMPLE, y)
-        svm.save("svm_model")
+
+        model_path = os.path.join(model_base_path, "svm_model")
+        svm.save(model_path)
     elif model_name == "logistic":
         X = X.astype(np.float32)
         y = y.astype(np.float32)
         lr = cv2.ml.LogisticRegression_create()
         lr.setTrainMethod(cv2.ml.LogisticRegression_MINI_BATCH)
-        lr.setMiniBatchSize(1)
-        lr.setTermCriteria((cv2.TERM_CRITERIA_MAX_ITER, 200, 1e-6))
+        lr.setMiniBatchSize(4)
+        lr.setTermCriteria((cv2.TERM_CRITERIA_MAX_ITER, 100, 1e-6))
         lr.train(X, cv2.ml.ROW_SAMPLE, y)
-        lr.save("lr_model")
+
+        model_path = os.path.join(model_base_path, "lr_model")
+        lr.save(model_path)
