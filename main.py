@@ -125,12 +125,26 @@ def create_dataset(dataset_path, block_size, is_test = False):
     feature_vectors = np.float32(feature_vectors)
     labels = np.array(labels)
 
-    feature_path = ("test_" if is_test else "") + "features2.npy"
-    label_path = ("test_" if is_test else "") + "labels2.npy"
+    if is_test:
+        feature_path = "test_features.npy"
+        label_path = "test_labels.npy"
 
-    # save the feature vectors and labels for later use
-    np.save(feature_path, feature_vectors)
-    np.save(label_path, labels)
+        # save the feature vectors and labels for later use
+        np.save(feature_path, feature_vectors)
+        np.save(label_path, labels)
+    else:
+        sets = ["train", "valid"]
+        trainX, validX, trainY, validY = train_test_split(feature_vectors, labels, test_size = 0.2)
+
+        print("TrainX : ", trainX.shape)
+        print("ValidX : ", validX.shape)
+        for set_path in sets:
+            feature_path = set_path + "_features.npy"
+            label_path = set_path + "_labels.npy"
+
+            # save the feature vectors and labels for later use
+            np.save(feature_path, feature_vectors)
+            np.save(label_path, labels)
 
 def read_data(data_path):
     data = np.load(data_path, allow_pickle = True)
