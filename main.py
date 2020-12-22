@@ -14,6 +14,7 @@ import graphviz
 # import models
 from sklearn.naive_bayes import MultinomialNB, GaussianNB
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.linear_model import LogisticRegression
 
 def get_positive_pair(left_img, right_img, disp_img, x, y, block_size):
     if left_img.shape != right_img.shape:
@@ -246,8 +247,8 @@ def stereoOpenCV(model, left_img, right_img, num_of_disparities, block_size):
 from random import shuffle
 
 block_size = 7
-testing = True
-model_name = "DecisionTree"
+testing = False
+model_name = "logistic"
 model_base_path = "./models"
 if testing:
     # testing part
@@ -269,8 +270,10 @@ if testing:
         model = cv2.ml.SVM_load(model_path)
     elif model_name == "logistic":
         model_path = os.path.join(model_base_path, "lr_model")
-        model = cv2.ml.LogisticRegression_load(model_path)
-
+        model = pickle.load(open(model_path, mode="rb"))
+        #model_path = os.path.join(model_base_path, "lr_model")
+        #model = cv2.ml.LogisticRegression_load(model_path)
+    print(model)
     test_dataset_path = "test_dataset"
     # create_dataset(test_dataset_path, block_size, is_test=True)
 
@@ -278,7 +281,7 @@ if testing:
     X = read_data("test_features.npy")
     y = np.float32(read_data("test_labels.npy"))
 
-    if model_name == "MultinomialNB" or model_name == "DecisionTree" or model_name == "GaussianNB":
+    if model_name == "MultinomialNB" or model_name == "DecisionTree" or model_name == "GaussianNB" or model_name== "logistic":
         preds = model.predict(X)
     elif model_name == "SVM" or model_name == "NormalBayes" or model_name== "logistic":
         preds = model.predict(X)[1]
@@ -301,9 +304,9 @@ if testing:
         base_disparity_img = base_model.compute(right_img, left_img) / 2
 
         # compute disparity with ml model
-        if model_name == "MultinomialNB" or model_name == "DecisionTree" or model_name == "GaussianNB":
+        if model_name == "MultinomialNB" or model_name == "DecisionTree" or model_name == "logistic":
             predicted_disp_img = stereoSKlearn(model, left_img, right_img, num_of_disparities, block_size)
-        elif model_name == "SVM" or model_name == "logistic":
+        elif model_name == "SVM":
             predicted_disp_img = stereoOpenCV(model, left_img, right_img, num_of_disparities, block_size)
 
 
@@ -355,13 +358,7 @@ else:
         model_path = os.path.join(model_base_path, "svm_model")
         svm.save(model_path)
     elif model_name == "logistic":
-        X = X.astype(np.float32)
-        y = y.astype(np.float32)
-        lr = cv2.ml.LogisticRegression_create()
-        lr.setTrainMethod(cv2.ml.LogisticRegression_MINI_BATCH)
-        lr.setMiniBatchSize(4)
-        lr.setTermCriteria((cv2.TERM_CRITERIA_MAX_ITER, 100, 1e-6))
-        lr.train(X, cv2.ml.ROW_SAMPLE, y)
-
+        lr = LogisticRegression(max_iter=100)
+        lr.fit(X, y)
         model_path = os.path.join(model_base_path, "lr_model")
-        lr.save(model_path)
+        pickle.dump(lr, open(model_path, mode="wb"))
