@@ -15,6 +15,7 @@ import graphviz
 from sklearn.naive_bayes import MultinomialNB, GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import AdaBoostClassifier
 
 def get_positive_pair(left_img, right_img, disp_img, x, y, block_size):
     if left_img.shape != right_img.shape:
@@ -247,8 +248,8 @@ def stereoOpenCV(model, left_img, right_img, num_of_disparities, block_size):
 from random import shuffle
 
 block_size = 7
-testing = False
-model_name = "logistic"
+testing = True
+model_name = "AdaBoost"
 model_base_path = "./models"
 if testing:
     # testing part
@@ -265,26 +266,24 @@ if testing:
     elif model_name == "GaussianNB":
         model_path = os.path.join(model_base_path, "gaussiannb_model")
         model = pickle.load(open(model_path, mode="rb"))
-    elif model_name == "SVM":
-        model_path = os.path.join(model_base_path, "svm_model")
-        model = cv2.ml.SVM_load(model_path)
     elif model_name == "logistic":
         model_path = os.path.join(model_base_path, "lr_model")
         model = pickle.load(open(model_path, mode="rb"))
-        #model_path = os.path.join(model_base_path, "lr_model")
-        #model = cv2.ml.LogisticRegression_load(model_path)
-    print(model)
+    elif model_name == "AdaBoost":
+        model_path = os.path.join(model_base_path, "adaboost_model")
+        model = pickle.load(open(model_path, mode="rb"))
+
     test_dataset_path = "test_dataset"
-    # create_dataset(test_dataset_path, block_size, is_test=True)
+    create_dataset(test_dataset_path, block_size, is_test=True)
 
     # predict for whole test set to get confusion matrix and other scores
     X = read_data("test_features.npy")
     y = np.float32(read_data("test_labels.npy"))
 
-    if model_name == "MultinomialNB" or model_name == "DecisionTree" or model_name == "GaussianNB" or model_name== "logistic":
-        preds = model.predict(X)
-    elif model_name == "SVM" or model_name == "NormalBayes" or model_name== "logistic":
-        preds = model.predict(X)[1]
+    # do the prediction
+    preds = model.predict(X)
+
+    # calculate the scores
     cm = confusion_matrix(y, preds, labels = [1, -1])
     (prec, recall, f1, _) = precision_recall_fscore_support(y, preds, average="binary", pos_label=1)
     acc = accuracy_score(y, preds)
@@ -303,26 +302,14 @@ if testing:
         # divide by 2 to make disparity calculation similar
         base_disparity_img = base_model.compute(right_img, left_img) / 2
 
-        # compute disparity with ml model
-        if model_name == "MultinomialNB" or model_name == "DecisionTree" or model_name == "logistic":
-            predicted_disp_img = stereoSKlearn(model, left_img, right_img, num_of_disparities, block_size)
-        elif model_name == "SVM":
-            predicted_disp_img = stereoOpenCV(model, left_img, right_img, num_of_disparities, block_size)
-
+        predicted_disp_img = stereoSKlearn(model, left_img, right_img, num_of_disparities, block_size)
 
         our_mse = (np.square(disp_img - predicted_disp_img)).mean(axis = None)
         base_mse = (np.square(disp_img - base_disparity_img)).mean(axis = None)
         print("Base MSE : ", base_mse)
         print("Our  MSE : ", our_mse)
 
-        fig, ax = plt.subplots(1, 3)
-        ax[0].imshow(disp_img, "gray")
-        ax[1].imshow(base_disparity_img, "gray")
-        ax[2].imshow(predicted_disp_img, "gray")
-
-        ax[0].set_xlabel("Ground Truth Disparity Map")
-        ax[1].set_xlabel("Base Disparity Map")
-        ax[2].set_xlabel("Calculated Disparity Map")
+        plt.imshow(predicted_disp_img)
         plt.show()
 
 else:
@@ -348,17 +335,13 @@ else:
         gnb.fit(X, y)
         model_path = os.path.join(model_base_path, "gaussiannb_model")
         pickle.dump(gnb, open(model_path, mode="wb"))
-    elif model_name == "SVM":
-        svm = cv2.ml.SVM_create()
-        svm.setType(cv2.ml.SVM_C_SVC)
-        svm.setKernel(cv2.ml.SVM_LINEAR)
-        svm.setTermCriteria((cv2.TERM_CRITERIA_MAX_ITER, 100, 1e-6))
-        svm.train(X, cv2.ml.ROW_SAMPLE, y)
-
-        model_path = os.path.join(model_base_path, "svm_model")
-        svm.save(model_path)
     elif model_name == "logistic":
         lr = LogisticRegression(max_iter=100)
         lr.fit(X, y)
         model_path = os.path.join(model_base_path, "lr_model")
         pickle.dump(lr, open(model_path, mode="wb"))
+    elif model_name == "AdaBoost":
+        ad = AdaBoostClassifier(learning_rate=0.5,n_estimators=5)
+        ad.fit(X, y)
+        model_path = os.path.join(model_base_path, "adaboost_model")
+        pickle.dump(ad, open(model_path, mode="wb"))
